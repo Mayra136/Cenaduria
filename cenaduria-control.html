@@ -38,10 +38,20 @@ document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>go(b.dataset.p
 function productPrice(p,qty){return p.price===35&&qty>=3?Math.floor(qty/3)*100+(qty%3)*35:qty*p.price}
 function renderProducts(){$('#products').innerHTML=db.inventory.map(p=>`<button class="product" onclick="addCart('${p.id}')"><span class="emoji">${p.emoji}</span><b>${p.name}</b><small>${money(p.price)}${p.offer?' · '+p.offer:''}</small><span class="add">+</span></button>`).join('')}
 function addCart(id) {
-    let comment = prompt("¿Alguna instrucción especial? (Ej: Sin cebolla)");
+    // 1. Preguntamos por el comentario al hacer clic
+    let comment = prompt("¿Alguna nota especial para este producto? (Ej: Sin cebolla)");
+    
+    // 2. Buscamos si ya existe el producto con ese mismo comentario para sumar cantidades
     let x = cart.find(i => i.id === id && i.comment === (comment || ""));
-    if (x) x.qty++;
-    else cart.push({ id, qty: 1, comment: comment || "" });
+    
+    if (x) {
+        x.qty++;
+    } else {
+        // 3. Si no existe (o el comentario es diferente), agregamos un nuevo ítem
+        cart.push({ id, qty: 1, comment: comment || "" });
+    }
+    
+    // 4. Actualizamos la vista
     renderCart();
 }
 function renderCart() {
