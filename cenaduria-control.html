@@ -37,11 +37,56 @@ function go(id){document.querySelectorAll('.page').forEach(p=>p.classList.toggle
 document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>go(b.dataset.page));
 function productPrice(p,qty){return p.price===35&&qty>=3?Math.floor(qty/3)*100+(qty%3)*35:qty*p.price}
 function renderProducts(){$('#products').innerHTML=db.inventory.map(p=>`<button class="product" onclick="addCart('${p.id}')"><span class="emoji">${p.emoji}</span><b>${p.name}</b><small>${money(p.price)}${p.offer?' · '+p.offer:''}</small><span class="add">+</span></button>`).join('')}
-function addCart(id){let x=cart.find(i=>i.id===id);if(x)x.qty++;else cart.push({id,qty:1});renderCart()}
-function renderCart(){let total=cart.reduce((s,i)=>s+productPrice(db.inventory.find(p=>p.id===i.id),i.qty),0);$('#total').textContent=money(total);$('#cart').innerHTML=cart.length?cart.map(i=>{let p=db.inventory.find(x=>x.id===i.id);return `<div class="order-row"><div><b>${p.name}</b><div class="qty"><button onclick="changeQty('${p.id}',-1)">−</button><span>${i.qty} ${p.unit}${i.qty>1?'s':''}</span><button onclick="changeQty('${p.id}',1)">+</button></div></div><b>${money(productPrice(p,i.qty))}</b></div>`}).join(''):'<div class="empty">Aún no hay productos.<br>Elige algo del menú.</div>'}
-function changeQty(id,n){let x=cart.find(i=>i.id===id);x.qty+=n;if(x.qty<1)cart=cart.filter(i=>i.id!==id);renderCart()} function clearCart(){cart=[];renderCart()}
+function addCart(id) {
+    let comment = prompt("¿Alguna instrucción especial? (Opcional)");
+    cart.push({ id, qty: 1, comment: comment || "" });
+    renderCart();
+}
+function renderCart() {
+    let total = cart.reduce((s, i) => s + productPrice(db.inventory.find(p => p.id === i.id), i.qty), 0);
+    $('#total').textContent = money(total);
+    $('#cart').innerHTML = cart.length ? cart.map((i, index) => {
+        let p = db.inventory.find(x => x.id === i.id);
+        return `<div class="order-row">
+            <div><b>${p.name}</b>${i.comment ? '<br><small style="color:var(--brand)">'+i.comment+'</small>' : ''}
+            <div class="qty">
+                <button onclick="changeQty(${index},-1)">−</button>
+                <span>${i.qty} ${p.unit}</span>
+                <button onclick="changeQty(${index},1)">+</button>
+            </div></div>
+            <b>${money(productPrice(p, i.qty))}</b></div>`;
+    }).join('') : '<div class="empty">Aún no hay productos.</div>';
+}
+function changeQty(index, n) {
+    cart[index].qty += n;
+    if (cart[index].qty < 1) cart.splice(index, 1);
+    renderCart();
+}
 document.querySelectorAll('.pay').forEach(b=>b.onclick=()=>{payment=b.dataset.pay;document.querySelectorAll('.pay').forEach(x=>x.classList.toggle('selected',x===b))});
-function finishSale(){if(!cart.length)return toast('Agrega productos al pedido');let items=cart.map(i=>{let p=db.inventory.find(x=>x.id===i.id);p.stock-=i.qty;return {name:p.name,id:p.id,qty:i.qty,subtotal:productPrice(p,i.qty),cost:p.avg*i.qty}});let sale={date:new Date().toISOString(),payment,items,total:items.reduce((s,x)=>s+x.subtotal,0),cost:items.reduce((s,x)=>s+x.cost,0)};db.sales.unshift(sale);save();clearCart();toast('Venta registrada · '+money(sale.total));go('dashboard')}
+function finishSale() {
+    if(!cart.length) return toast('Agrega productos al pedido');
+    let items = cart.map(i => {
+        let p = db.inventory.find(x => x.id === i.id), unitCost = plateCost(p.id);
+        recipeFor(p.id).forEach(r => {
+            let ing = db.ingredients.find(x => x.id === r.ingredientId);
+            if(ing) ing.stock -= r.qty * i.qty;
+        });
+        p.stock -= i.qty;
+        return {
+            name: p.name + (i.comment ? ' ('+i.comment+')' : ''),
+            id: i.id,
+            qty: i.qty,
+            subtotal: productPrice(p, i.qty),
+            cost: unitCost * i.qty
+        };
+    });
+    let sale = {date: new Date().toISOString(), payment, items, total: items.reduce((s,x)=>s+x.subtotal,0), cost: items.reduce((s,x)=>s+x.cost,0)};
+    db.sales.unshift(sale);
+    save();
+    clearCart();
+    toast('Venta registrada');
+    go('dashboard');
+}
 $('#purchaseForm').onsubmit=e=>{e.preventDefault();let p=db.inventory.find(x=>x.id===$('#purchaseProduct').value),q=+$('#purchaseQty').value,c=+$('#purchaseCost').value;let existing=p.stock*p.avg;p.avg=(existing+c)/(p.stock+q);p.stock+=q;db.purchases.unshift({date:new Date().toISOString(),product:p.name,provider:$('#supplier').value,qty:q,total:c});save();e.target.reset();toast('Compra registrada e inventario actualizado');render()}
 function renderPurchases(){$('#purchaseProduct').innerHTML=db.inventory.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');$('#purchaseList').innerHTML=db.purchases.length?db.purchases.slice(0,12).map(p=>`<tr><td>${new Date(p.date).toLocaleDateString('es-MX')}</td><td>${p.product}</td><td>${p.provider}</td><td>${p.qty}</td><td class="money">${money(p.total)}</td></tr>`).join(''):'<tr><td colspan="5" class="empty">Aún no hay compras registradas.</td></tr>'}
 function renderInventory(){$('#inventoryList').innerHTML=db.inventory.map(p=>`<tr><td><b>${p.name}</b></td><td>${p.unit}</td><td class="${p.stock<=p.min?'warn':''}">${p.stock}</td><td>${p.min}</td><td>${money(p.avg)}</td><td class="money">${money(p.stock*p.avg)}</td><td><span class="pill ${p.stock<=p.min?'low':'ok'}">${p.stock<=p.min?'Reponer':'Disponible'}</span></td></tr>`).join('')}
